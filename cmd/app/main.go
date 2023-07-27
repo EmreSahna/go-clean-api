@@ -28,7 +28,12 @@ func main() {
 		repository.NewGreetingsRepository(),
 	)
 
+	usersService := services.NewUsersService(
+		repository.NewUsersRepository(db),
+	)
+
 	r := gin.New()
 	handler.NewGreetingsHandler(r, greetingsService)
+	handler.NewUsersHandler(r, usersService)
 	http.ListenAndServe(fmt.Sprintf(":%s", os.Getenv("PORT")), r)
 }
