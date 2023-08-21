@@ -1,39 +1,42 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
-	"gin-example/api/handler"
-	"gin-example/pkg/repository"
-	"gin-example/pkg/services"
 	"github.com/gin-gonic/gin"
-	_ "github.com/go-sql-driver/mysql"
-	"github.com/joho/godotenv"
+	"go-clean-api/config"
+	"go-clean-api/database"
+	"go-clean-api/middleware"
+	"go-clean-api/router"
+	"go-clean-api/service"
+	"go.uber.org/zap"
 	"net/http"
-	"os"
+	"time"
 )
 
 func main() {
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		panic("Error loading .env file")
-	}
+	logger := zap.NewExample()
+	defer logger.Sync()
 
-	db, err := sql.Open("mysql", os.Getenv("MYSQL_DSN"))
-	if err != nil {
-		panic(err)
-	}
-
-	greetingsService := services.NewGreetingsService(
-		repository.NewGreetingsRepository(),
-	)
-
-	usersService := services.NewUsersService(
-		repository.NewUsersRepository(db),
-	)
+	cfg := config.LoadConfig()
 
 	r := gin.New()
-	handler.NewGreetingsHandler(r, greetingsService)
-	handler.NewUsersHandler(r, usersService)
-	http.ListenAndServe(fmt.Sprintf(":%s", os.Getenv("PORT")), r)
+	r.Use(middleware.AllowCors())
+
+	db := database.ConnDB(cfg)
+
+	services := service.NewServices(db, cfg)
+
+	router.SetupRoutes(r, services)
+
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Handler:      r,
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
+
+	logger.Info("Starting server", zap.Int("port", cfg.Port), zap.String("srv", srv.Addr))
+	err := srv.ListenAndServe()
+	logger.Fatal("Failed to start server", zap.Error(err))
 }
